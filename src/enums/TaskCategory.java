@@ -1,5 +1,8 @@
-package src.enums;
+package enums;
 
-public class TaskCategory {
-
+public enum TaskCategory {
+    BUGFIX,
+    FEATURE,
+    DOCUMENTATION,
+    RESEARCH
 }

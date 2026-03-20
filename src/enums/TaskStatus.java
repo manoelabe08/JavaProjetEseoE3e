@@ -1,5 +1,8 @@
-package src.enums;
+package enums;
 
-public class TaskStatus {
-
+public enum TaskStatus {
+    TODO,
+    BLOCKED,
+    IN_PROGRESS,
+    DONE
 }

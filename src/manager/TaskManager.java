@@ -1,4 +1,4 @@
-package src.manager;
+package manager;
 
 public class TaskManager {
 

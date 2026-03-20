@@ -1,5 +1,8 @@
-package src.enums;
+package enums;
 
-public class PriorityLevel {
-
+public enum PriorityLevel {
+    LOW,
+    MEDIUM,
+    HIGH,
+    CRITICAL
 }

@@ -1,5 +1,7 @@
-package src.enums;
+package enums;
 
-public class NotificationType {
-
+public enum NotificationType {
+    EMAIL,
+    SMS,
+    CONSOLE
 }

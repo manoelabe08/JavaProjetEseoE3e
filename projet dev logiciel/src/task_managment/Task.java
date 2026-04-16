@@ -36,6 +36,14 @@ public class Task {
         return this.taskId;
     }
 
+    public void setAssignee(Engineer engineer) {
+        this.assignedEngineer = engineer;
+        this.history.add(new TaskHistory("assigned to " + engineer.getName(), engineer, LocalDateTime.now()));
+    }
+    public void setstatus(TaskStatus status) {
+        this.status = status;
+    }
+
     public ArrayList<Task> getDependencies() {
         return this.dependencies;
     }
@@ -44,7 +52,7 @@ public class Task {
     }
 
     public void updateStatus(TaskStatus newStatus,User user) {
-        if (user.canChangeStatus){
+        if (user.partialAccess){
             this.status = newStatus;
             this.history.add(new TaskHistory("changed status to " + newStatus, this.assignedEngineer, LocalDateTime.now()));
         }

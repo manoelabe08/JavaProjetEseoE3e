@@ -1,2 +1,3 @@
-T1;task1;teste de creation de tache;LOW;TODO;BUGFIX;2026-05-20;E1
+T1;task1;teste de creation de tache;LOW;TODO;BUGFIX;2026-05-20;null
 T2;task2;test de creation d'une deuxieme taches;MEDIUM;TODO;FEATURE;2026-05-17;null
+T3;task;ergvaerg;LOW;TODO;BUGFIX;2026-06-10;null

@@ -17,6 +17,7 @@ import user.AuthService;
 import user.Engineer;
 import user.Manager;
 import user.User;
+import user.UserAccount;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
@@ -26,16 +27,37 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Fenêtre principale de l'application STRMS.
+ * Cette version gère :
+ * - les tâches
+ * - l'historique
+ * - les utilisateurs
+ * - le chargement/sauvegarde des utilisateurs depuis un fichier txt
+ * - le changement de mot de passe
+ */
 public class STRMSGui extends JFrame {
 
+    // Gestionnaire métier des tâches
     private final TaskManager taskManager;
+
+    // Service d'authentification (comptes + mots de passe)
+    private final AuthService authService;
+
+    // Liste locale des utilisateurs visibles dans l'application
     private final List<User> localUsers;
+
+    // Utilisateur connecté
     private final User currentUser;
 
+    // Composants liés au tableau des tâches
     private final DefaultTableModel taskTableModel;
     private final JTable taskTable;
+
+    // Zone texte pour afficher l'historique d'une tâche
     private final JTextArea historyArea;
 
+    // ComboBox utilisées dans l'interface
     private final JComboBox<String> taskComboBox;
     private final JComboBox<String> dependencyTaskComboBox;
     private final JComboBox<String> dependencyOnComboBox;
@@ -44,28 +66,38 @@ public class STRMSGui extends JFrame {
     private final JComboBox<String> completeTaskComboBox;
     private final JComboBox<String> historyTaskComboBox;
 
+    // Onglets principaux
     private final JTabbedPane tabs;
 
-    public STRMSGui(User loggedUser) {
+    /**
+     * Constructeur principal.
+     * @param loggedUser utilisateur connecté
+     * @param authService service d'authentification déjà chargé
+     */
+    public STRMSGui(User loggedUser, AuthService authService) {
         this.taskManager = new TaskManager();
+        this.authService = authService;
         this.localUsers = new ArrayList<>();
         this.currentUser = loggedUser;
 
         setTitle("STRMS - Smart Task & Resource Management System - Connected: " + currentUser.getName());
-        setSize(1100, 700);
+        setSize(1200, 720);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
         tabs = new JTabbedPane();
 
+        // Modèle du tableau des tâches
         taskTableModel = new DefaultTableModel(
                 new String[]{"ID", "Title", "Priority", "Category", "Status", "Deadline", "Engineer"}, 0
         );
         taskTable = new JTable(taskTableModel);
 
+        // Zone historique
         historyArea = new JTextArea();
         historyArea.setEditable(false);
 
+        // Initialisation des ComboBox
         taskComboBox = new JComboBox<>();
         dependencyTaskComboBox = new JComboBox<>();
         dependencyOnComboBox = new JComboBox<>();
@@ -74,8 +106,10 @@ public class STRMSGui extends JFrame {
         completeTaskComboBox = new JComboBox<>();
         historyTaskComboBox = new JComboBox<>();
 
-        seedDefaultUsers();
+        // Charge les utilisateurs depuis AuthService dans l'interface et dans TaskManager
+        loadUsersFromAuthService();
 
+        // Création des onglets
         tabs.add("Users", createUsersPanel());
         tabs.add("Tasks", createTasksPanel());
         tabs.add("Assign", createAssignPanel());
@@ -85,6 +119,7 @@ public class STRMSGui extends JFrame {
         tabs.add("Dashboard", createDashboardPanel());
         tabs.add("Persistence", createPersistencePanel());
 
+        // Bouton logout
         JButton logoutButton = new JButton("Logout");
         logoutButton.addActionListener(e -> logout());
 
@@ -93,7 +128,7 @@ public class STRMSGui extends JFrame {
 
         JPanel topRightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 5));
         topRightPanel.add(logoutButton);
-        container.add(topRightPanel, BorderLayout.EAST);
+        container.add(topRightPanel, BorderLayout.NORTH);
 
         setLayout(new BorderLayout());
         add(container, BorderLayout.CENTER);
@@ -103,13 +138,37 @@ public class STRMSGui extends JFrame {
         applyPermissions();
     }
 
+    /**
+     * Recharge les utilisateurs depuis AuthService
+     * puis les injecte dans localUsers et TaskManager.
+     */
+    private void loadUsersFromAuthService() {
+        localUsers.clear();
+
+        for (UserAccount account : authService.getAllAccounts()) {
+            User user = account.getUser();
+            localUsers.add(user);
+            taskManager.addUser(user);
+        }
+    }
+
+    /**
+     * Onglet gestion des utilisateurs.
+     * Permet :
+     * - ajouter un utilisateur
+     * - sauvegarder les users dans un fichier
+     * - charger les users depuis un fichier
+     * - changer le mot de passe de l'utilisateur connecté
+     */
     private JPanel createUsersPanel() {
         JPanel panel = new JPanel(new BorderLayout());
 
-        JPanel form = new JPanel(new GridLayout(5, 2, 10, 10));
+        // Partie formulaire d'ajout
+        JPanel form = new JPanel(new GridLayout(6, 2, 10, 10));
         JTextField idField = new JTextField();
         JTextField nameField = new JTextField();
         JTextField emailField = new JTextField();
+        JTextField passwordField = new JTextField();
         JComboBox<String> roleBox = new JComboBox<>(new String[]{"Admin", "Manager", "Engineer"});
         JButton addButton = new JButton("Add User");
 
@@ -120,14 +179,28 @@ public class STRMSGui extends JFrame {
         form.add(nameField);
         form.add(new JLabel("Email:"));
         form.add(emailField);
+        form.add(new JLabel("Password:"));
+        form.add(passwordField);
         form.add(new JLabel("Role:"));
         form.add(roleBox);
         form.add(new JLabel(""));
         form.add(addButton);
 
+        // Zone d'affichage des utilisateurs
         JTextArea usersArea = new JTextArea();
         usersArea.setEditable(false);
 
+        // Boutons supplémentaires
+        JButton saveUsersButton = new JButton("Save Users");
+        JButton loadUsersButton = new JButton("Load Users");
+        JButton changePasswordButton = new JButton("Change My Password");
+
+        JPanel actionsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        actionsPanel.add(saveUsersButton);
+        actionsPanel.add(loadUsersButton);
+        actionsPanel.add(changePasswordButton);
+
+        // Ajouter un utilisateur
         addButton.addActionListener(e -> {
             if (!currentUser.canCreateTask()) {
                 showError("You do not have permission to add users.");
@@ -137,9 +210,10 @@ public class STRMSGui extends JFrame {
             String id = idField.getText().trim();
             String name = nameField.getText().trim();
             String email = emailField.getText().trim();
+            String password = passwordField.getText().trim();
             String role = (String) roleBox.getSelectedItem();
 
-            if (id.isEmpty() || name.isEmpty() || email.isEmpty()) {
+            if (id.isEmpty() || name.isEmpty() || email.isEmpty() || password.isEmpty()) {
                 showError("Please fill all user fields.");
                 return;
             }
@@ -159,21 +233,122 @@ public class STRMSGui extends JFrame {
 
             localUsers.add(user);
             taskManager.addUser(user);
+            authService.addAccount(user, password);
+
             refreshUsersArea(usersArea);
             refreshAllComboBoxes();
 
             idField.setText("");
             nameField.setText("");
             emailField.setText("");
+            passwordField.setText("");
         });
 
+        // Sauvegarder les utilisateurs dans un fichier texte
+        saveUsersButton.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setDialogTitle("Save users file");
+            chooser.setSelectedFile(new File("data/users.txt"));
+
+            int result = chooser.showSaveDialog(this);
+            if (result == JFileChooser.APPROVE_OPTION) {
+                try {
+                    authService.saveAccountsToFile(chooser.getSelectedFile().getAbsolutePath());
+                    JOptionPane.showMessageDialog(this, "Users saved successfully.");
+                } catch (FilePersistenceException ex) {
+                    showError(ex.getMessage());
+                }
+            }
+        });
+
+        // Charger les utilisateurs depuis un fichier externe
+        loadUsersButton.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setDialogTitle("Load users file");
+            chooser.setSelectedFile(new File("data/users.txt"));
+
+            int result = chooser.showOpenDialog(this);
+            if (result == JFileChooser.APPROVE_OPTION) {
+                try {
+                    authService.loadAccountsFromFile(chooser.getSelectedFile().getAbsolutePath());
+
+                    // Recharge localUsers et TaskManager à partir des comptes chargés
+                    loadUsersFromAuthService();
+
+                    refreshUsersArea(usersArea);
+                    refreshAllComboBoxes();
+
+                    JOptionPane.showMessageDialog(this, "Users loaded successfully.");
+                } catch (FilePersistenceException ex) {
+                    showError(ex.getMessage());
+                }
+            }
+        });
+
+        // Modifier le mot de passe de l'utilisateur connecté
+        changePasswordButton.addActionListener(e -> showChangePasswordDialog());
+
         panel.add(form, BorderLayout.NORTH);
-        panel.add(new JScrollPane(usersArea), BorderLayout.CENTER);
+        panel.add(actionsPanel, BorderLayout.CENTER);
+        panel.add(new JScrollPane(usersArea), BorderLayout.SOUTH);
 
         refreshUsersArea(usersArea);
         return panel;
     }
 
+    /**
+     * Ouvre une petite boîte de dialogue pour changer le mot de passe.
+     */
+    private void showChangePasswordDialog() {
+        JPanel panel = new JPanel(new GridLayout(3, 2, 10, 10));
+
+        JPasswordField oldPasswordField = new JPasswordField();
+        JPasswordField newPasswordField = new JPasswordField();
+        JPasswordField confirmPasswordField = new JPasswordField();
+
+        panel.add(new JLabel("Old password:"));
+        panel.add(oldPasswordField);
+        panel.add(new JLabel("New password:"));
+        panel.add(newPasswordField);
+        panel.add(new JLabel("Confirm password:"));
+        panel.add(confirmPasswordField);
+
+        int result = JOptionPane.showConfirmDialog(
+                this,
+                panel,
+                "Change Password",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE
+        );
+
+        if (result == JOptionPane.OK_OPTION) {
+            String oldPassword = new String(oldPasswordField.getPassword()).trim();
+            String newPassword = new String(newPasswordField.getPassword()).trim();
+            String confirmPassword = new String(confirmPasswordField.getPassword()).trim();
+
+            if (oldPassword.isEmpty() || newPassword.isEmpty() || confirmPassword.isEmpty()) {
+                showError("All password fields are required.");
+                return;
+            }
+
+            if (!newPassword.equals(confirmPassword)) {
+                showError("New password and confirmation do not match.");
+                return;
+            }
+
+            boolean success = authService.changePassword(currentUser.getUID(), oldPassword, newPassword);
+
+            if (success) {
+                JOptionPane.showMessageDialog(this, "Password changed successfully.");
+            } else {
+                showError("Old password is incorrect.");
+            }
+        }
+    }
+
+    /**
+     * Onglet de création et affichage des tâches.
+     */
     private JPanel createTasksPanel() {
         JPanel panel = new JPanel(new BorderLayout());
 
@@ -237,6 +412,9 @@ public class STRMSGui extends JFrame {
         return panel;
     }
 
+    /**
+     * Onglet d'assignation.
+     */
     private JPanel createAssignPanel() {
         JPanel panel = new JPanel(new GridLayout(4, 2, 10, 10));
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -276,6 +454,9 @@ public class STRMSGui extends JFrame {
         return panel;
     }
 
+    /**
+     * Onglet de dépendances.
+     */
     private JPanel createDependencyPanel() {
         JPanel panel = new JPanel(new GridLayout(4, 2, 10, 10));
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -315,6 +496,9 @@ public class STRMSGui extends JFrame {
         return panel;
     }
 
+    /**
+     * Onglet d'exécution.
+     */
     private JPanel createExecutionPanel() {
         JPanel panel = new JPanel(new GridLayout(6, 2, 10, 10));
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -341,12 +525,6 @@ public class STRMSGui extends JFrame {
             try {
                 String taskId = (String) startTaskComboBox.getSelectedItem();
                 Task task = taskManager.findTask(taskId);
-
-                if (task == null) {
-                    showError("Task not found.");
-                    return;
-                }
-
                 Engineer engineer = task.getAssignedEngineer();
 
                 if (engineer == null) {
@@ -377,12 +555,6 @@ public class STRMSGui extends JFrame {
             try {
                 String taskId = (String) completeTaskComboBox.getSelectedItem();
                 Task task = taskManager.findTask(taskId);
-
-                if (task == null) {
-                    showError("Task not found.");
-                    return;
-                }
-
                 Engineer engineer = task.getAssignedEngineer();
 
                 if (engineer == null) {
@@ -406,20 +578,42 @@ public class STRMSGui extends JFrame {
         return panel;
     }
 
+    /**
+     * Onglet historique.
+     */
     private JPanel createHistoryPanel() {
         JPanel panel = new JPanel(new BorderLayout());
 
         JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton showHistoryButton = new JButton("Show History");
+        JButton loadHistoryButton = new JButton("Show History");
         JButton saveCurrentHistoryButton = new JButton("Save Selected Task History");
-        JButton saveAllHistoriesButton = new JButton("Save All Histories");
+        JButton loadAllHistoriesButton = new JButton("Load Histories");
 
         top.add(new JLabel("Task:"));
         top.add(historyTaskComboBox);
-        top.add(showHistoryButton);
+        top.add(loadHistoryButton);
         top.add(saveCurrentHistoryButton);
-        top.add(saveAllHistoriesButton);
+        top.add(loadAllHistoriesButton);
 
+        loadHistoryButton.addActionListener(e -> {
+            try {
+                String taskId = (String) historyTaskComboBox.getSelectedItem();
+
+                if (taskId == null) {
+                    showError("Select a task.");
+                    return;
+                }
+
+                Task task = taskManager.findTask(taskId);
+                historyArea.setText("");
+
+                for (TaskHistoryEntry entry : task.getHistory()) {
+                    historyArea.append(entry.toString() + "\n");
+                }
+            } catch (TaskNotFoundException ex) {
+                showError(ex.getMessage());
+            }
+        });
 
         saveCurrentHistoryButton.addActionListener(e -> {
             String taskId = (String) historyTaskComboBox.getSelectedItem();
@@ -444,45 +638,30 @@ public class STRMSGui extends JFrame {
             }
         });
 
-        saveAllHistoriesButton.addActionListener(e -> {
+        loadAllHistoriesButton.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser();
-            chooser.setDialogTitle("Save all task histories");
-            chooser.setSelectedFile(new File("all_task_histories.txt"));
+            chooser.setDialogTitle("Load task histories");
 
-            int result = chooser.showSaveDialog(this);
+            int result = chooser.showOpenDialog(this);
             if (result == JFileChooser.APPROVE_OPTION) {
                 try {
-                    taskManager.saveTaskHistoriesToFile(chooser.getSelectedFile().getAbsolutePath());
-                    JOptionPane.showMessageDialog(this, "All task histories saved.");
-                } catch (FilePersistenceException ex) {
+                    taskManager.loadTaskHistoriesFromFile(chooser.getSelectedFile().getAbsolutePath());
+                    JOptionPane.showMessageDialog(this, "Task histories loaded.");
+                    historyArea.setText("");
+                } catch (FilePersistenceException | TaskNotFoundException ex) {
                     showError(ex.getMessage());
                 }
             }
         });
-        
-        showHistoryButton.addActionListener(e -> {
-            try {
-                String taskId = (String) historyTaskComboBox.getSelectedItem();
-                if (taskId == null) {
-                    showError("Select a task.");
-                    return;
-                }
 
-                Task task = taskManager.findTask(taskId);
-                historyArea.setText("");
-
-                for (TaskHistoryEntry entry : task.getHistory()) {
-                    historyArea.append(entry.toString() + "\n");
-                }
-            } catch (TaskNotFoundException ex) {
-                showError(ex.getMessage());
-            }
-        });
         panel.add(top, BorderLayout.NORTH);
         panel.add(new JScrollPane(historyArea), BorderLayout.CENTER);
         return panel;
     }
 
+    /**
+     * Onglet dashboard.
+     */
     private JPanel createDashboardPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         JTextArea dashboardArea = new JTextArea();
@@ -517,6 +696,9 @@ public class STRMSGui extends JFrame {
         return panel;
     }
 
+    /**
+     * Onglet persistance des tâches.
+     */
     private JPanel createPersistencePanel() {
         JPanel panel = new JPanel(new GridLayout(4, 1, 10, 10));
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -563,6 +745,9 @@ public class STRMSGui extends JFrame {
         return panel;
     }
 
+    /**
+     * Active/désactive les onglets selon les permissions.
+     */
     private void applyPermissions() {
         setTabEnabled("Users", currentUser.canCreateTask());
         setTabEnabled("Tasks", currentUser.canCreateTask());
@@ -574,6 +759,9 @@ public class STRMSGui extends JFrame {
         setTabEnabled("Persistence", currentUser.canDeleteTask());
     }
 
+    /**
+     * Active ou désactive un onglet par son titre.
+     */
     private void setTabEnabled(String tabTitle, boolean enabled) {
         int index = tabs.indexOfTab(tabTitle);
         if (index != -1) {
@@ -581,8 +769,12 @@ public class STRMSGui extends JFrame {
         }
     }
 
+    /**
+     * Recharge le tableau des tâches.
+     */
     private void refreshTaskTable() {
         taskTableModel.setRowCount(0);
+
         for (Task task : taskManager.listTasks()) {
             taskTableModel.addRow(new Object[]{
                     task.getTaskId(),
@@ -596,6 +788,9 @@ public class STRMSGui extends JFrame {
         }
     }
 
+    /**
+     * Recharge toutes les ComboBox.
+     */
     private void refreshAllComboBoxes() {
         taskComboBox.removeAllItems();
         dependencyTaskComboBox.removeAllItems();
@@ -622,27 +817,20 @@ public class STRMSGui extends JFrame {
         }
     }
 
+    /**
+     * Recharge la zone texte des utilisateurs.
+     */
     private void refreshUsersArea(JTextArea usersArea) {
         usersArea.setText("");
+
         for (User user : localUsers) {
             usersArea.append(user.toString() + "\n");
         }
     }
 
-    private void seedDefaultUsers() {
-        Admin admin = new Admin("A1", "Alice", "alice@strms.com");
-        Manager manager = new Manager("M1", "Bob", "bob@strms.com");
-        Engineer engineer = new Engineer("E1", "Charlie", "charlie@strms.com");
-
-        localUsers.add(admin);
-        localUsers.add(manager);
-        localUsers.add(engineer);
-
-        taskManager.addUser(admin);
-        taskManager.addUser(manager);
-        taskManager.addUser(engineer);
-    }
-
+    /**
+     * Recherche un ingénieur par identifiant.
+     */
     private Engineer getEngineerById(String id) {
         for (User user : localUsers) {
             if (user instanceof Engineer && user.getUID().equals(id)) {
@@ -652,6 +840,9 @@ public class STRMSGui extends JFrame {
         return null;
     }
 
+    /**
+     * Déconnexion puis retour à l'écran de login.
+     */
     private void logout() {
         int choice = JOptionPane.showConfirmDialog(
                 this,
@@ -664,8 +855,39 @@ public class STRMSGui extends JFrame {
             dispose();
 
             SwingUtilities.invokeLater(() -> {
-                AuthService authService = new AuthService();
+                LoginDialog loginDialog = new LoginDialog(null, authService);
+                loginDialog.setVisible(true);
 
+                User authenticatedUser = loginDialog.getAuthenticatedUser();
+
+                if (authenticatedUser != null) {
+                    new STRMSGui(authenticatedUser, authService).setVisible(true);
+                } else {
+                    System.exit(0);
+                }
+            });
+        }
+    }
+
+    /**
+     * Affiche une boîte d'erreur.
+     */
+    private void showError(String message) {
+        JOptionPane.showMessageDialog(this, message, "Error", JOptionPane.ERROR_MESSAGE);
+    }
+
+    /**
+     * Point d'entrée principal.
+     */
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            AuthService authService = new AuthService();
+
+            try {
+                // Essaie de charger les utilisateurs depuis un fichier externe
+                authService.loadAccountsFromFile("data/users.txt");
+            } catch (FilePersistenceException e) {
+                // Si le fichier n'existe pas encore, on crée des comptes par défaut
                 Admin admin = new Admin("A1", "Alice", "alice@strms.com");
                 Manager manager = new Manager("M1", "Bob", "bob@strms.com");
                 Engineer engineer = new Engineer("E1", "Charlie", "charlie@strms.com");
@@ -674,36 +896,12 @@ public class STRMSGui extends JFrame {
                 authService.addAccount(manager, "manager123");
                 authService.addAccount(engineer, "engineer123");
 
-                LoginDialog loginDialog = new LoginDialog(null, authService);
-                loginDialog.setVisible(true);
-
-                User authenticatedUser = loginDialog.getAuthenticatedUser();
-
-                if (authenticatedUser != null) {
-                    new STRMSGui(authenticatedUser).setVisible(true);
-                } else {
-                    System.exit(0);
+                try {
+                    authService.saveAccountsToFile("data/users.txt");
+                } catch (FilePersistenceException ex) {
+                    JOptionPane.showMessageDialog(null, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 }
-            });
-        }
-    }
-
-    private void showError(String message) {
-        JOptionPane.showMessageDialog(this, message, "Error", JOptionPane.ERROR_MESSAGE);
-    }
-
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            AuthService authService = new AuthService();
-            Admin dev = new Admin("gon92brb","azid","azid.attoumani@gmail.com");
-            Admin admin = new Admin("A1", "Alice", "alice@strms.com");
-            Manager manager = new Manager("M1", "Bob", "bob@strms.com");
-            Engineer engineer = new Engineer("E1", "Charlie", "charlie@strms.com");
-            
-            authService.addAccount(admin, "admin123");
-            authService.addAccount(manager, "manager123");
-            authService.addAccount(engineer, "engineer123");
-            authService.addAccount(dev, "1234");
+            }
 
             LoginDialog loginDialog = new LoginDialog(null, authService);
             loginDialog.setVisible(true);
@@ -711,7 +909,7 @@ public class STRMSGui extends JFrame {
             User authenticatedUser = loginDialog.getAuthenticatedUser();
 
             if (authenticatedUser != null) {
-                new STRMSGui(authenticatedUser).setVisible(true);
+                new STRMSGui(authenticatedUser, authService).setVisible(true);
             } else {
                 System.exit(0);
             }

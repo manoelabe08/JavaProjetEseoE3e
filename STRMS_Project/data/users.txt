@@ -1,0 +1,3 @@
+A1;Alice;alice@strms.com;admin123;Admin
+M1;Bob;bob@strms.com;manager123;Manager
+E1;Charlie;charlie@strms.com;engineer123;Engineer

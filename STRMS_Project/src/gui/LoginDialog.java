@@ -8,7 +8,7 @@ import java.awt.*;
 
 public class LoginDialog extends JDialog {
 
-    private User authenticatedUser;
+    private User authenticatedUser; // utilisateur connecté après succès
 
     public LoginDialog(JFrame parent, AuthService authService) {
         super(parent, "Connexion", true);
@@ -37,20 +37,27 @@ public class LoginDialog extends JDialog {
             String id = idField.getText().trim();
             String password = new String(passwordField.getPassword());
 
+            // Vérification des champs vides
             if (id.isEmpty() || password.isEmpty()) {
-                JOptionPane.showMessageDialog(this,
+                JOptionPane.showMessageDialog(
+                        this,
                         "Veuillez remplir l'identifiant et le mot de passe.",
                         "Erreur",
-                        JOptionPane.ERROR_MESSAGE);
+                        JOptionPane.ERROR_MESSAGE
+                );
                 return;
             }
 
+            // Recherche de l'utilisateur dans le fichier déjà chargé
             User user = authService.login(id, password);
+
             if (user == null) {
-                JOptionPane.showMessageDialog(this,
-                        "Identifiants invalides.",
+                JOptionPane.showMessageDialog(
+                        this,
+                        "Identifiant ou mot de passe incorrect.",
                         "Erreur de connexion",
-                        JOptionPane.ERROR_MESSAGE);
+                        JOptionPane.ERROR_MESSAGE
+                );
             } else {
                 authenticatedUser = user;
                 dispose();

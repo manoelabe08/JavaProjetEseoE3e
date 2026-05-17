@@ -13,11 +13,14 @@ import file_management.FileManager;
 import user.Engineer;
 import user.User;
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -245,6 +248,81 @@ public class TaskManager {
         } catch (IOException e) {
             throw new FilePersistenceException("Error while saving task histories: " + e.getMessage());
         }
+    }
+
+    public void loadTaskHistoriesFromFile(String filePath)
+            throws FilePersistenceException, TaskNotFoundException {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            Task currentTask = null;
+            boolean readingHistory = false;
+
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+
+                if (line.isEmpty()) {
+                    continue;
+                }
+
+                if (line.equals("====================================")) {
+                    currentTask = null;
+                    readingHistory = false;
+                    continue;
+                }
+
+                if (line.startsWith("TASK ID: ")) {
+                    String taskId = line.substring("TASK ID: ".length()).trim();
+                    currentTask = findTask(taskId);
+                    currentTask.clearHistory();
+                    readingHistory = false;
+                    continue;
+                }
+
+                if (line.equals("HISTORY:")) {
+                    readingHistory = true;
+                    continue;
+                }
+
+                if (readingHistory && line.startsWith("- ")) {
+                    if (currentTask == null) {
+                        continue;
+                    }
+
+                    String entryText = line.substring(2).trim();
+                    String[] parts = entryText.split("\\s*\\|\\s*", 3);
+
+                    if (parts.length < 3) {
+                        continue;
+                    }
+
+                    LocalDateTime timestamp = LocalDateTime.parse(parts[0]);
+                    String userName = parts[1];
+                    String action = parts[2];
+
+                    User matchedUser = findUserByName(userName);
+                    if (matchedUser == null) {
+                        throw new FilePersistenceException("User not found for history entry: " + userName);
+                    }
+
+                    currentTask.addLoadedHistoryEntry(
+                            new TaskHistoryEntry(timestamp, matchedUser, action)
+                    );
+                }
+            }
+        } catch (TaskNotFoundException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new FilePersistenceException("Error while loading task histories: " + e.getMessage());
+        }
+    }
+
+    private User findUserByName(String name) {
+        for (User user : users.values()) {
+            if (user.getName().equals(name)) {
+                return user;
+            }
+        }
+        return null;
     }
 
     private void writeTaskHistory(BufferedWriter writer, Task task) throws IOException {

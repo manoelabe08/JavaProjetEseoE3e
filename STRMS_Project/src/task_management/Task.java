@@ -127,6 +127,14 @@ public class Task implements Comparable<Task> {
         history.add(new TaskHistoryEntry(LocalDateTime.now(), user, action));
     }
 
+    public void addLoadedHistoryEntry(TaskHistoryEntry entry) {
+        history.add(entry);
+    }
+
+    public void clearHistory() {
+        history.clear();
+    }
+
     @Override
     public int compareTo(Task other) {
         return Integer.compare(other.priority.getValue(), this.priority.getValue());

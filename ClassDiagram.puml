@@ -1,0 +1,303 @@
+@startuml STRMS_ClassDiagram
+!theme blueprint
+skinparam classAttributeIconSize 0
+skinparam classFontSize 12
+skinparam linetype ortho
+skinparam nodesep 50
+skinparam ranksep 70
+
+package "enums" {
+  enum TaskStatus {
+    TODO
+    BLOCKED
+    IN_PROGRESS
+    DONE
+  }
+
+  enum PriorityLevel {
+    LOW
+    MEDIUM
+    HIGH
+    CRITICAL
+    --
+    - value : int
+    --
+    + getValue() : int
+  }
+
+  enum TaskCategory {
+    BUGFIX
+    FEATURE
+    DOCUMENTATION
+    RESEARCH
+  }
+
+  enum NotificationType {
+    EMAIL
+    SMS
+    CONSOLE
+  }
+}
+
+package "exceptions" {
+  class CircularDependencyException extends Exception {
+    + CircularDependencyException(message : String)
+  }
+
+  class DependencyNotCompletedException extends Exception {
+    + DependencyNotCompletedException(message : String)
+  }
+
+  class TaskNotFoundException extends Exception {
+    + TaskNotFoundException(message : String)
+  }
+
+  class InvalidTaskStateException extends Exception {
+    + InvalidTaskStateException(message : String)
+  }
+
+  class InvalidRoleException extends Exception {
+    + InvalidRoleException(message : String)
+  }
+
+  class FilePersistenceException extends Exception {
+    + FilePersistenceException(message : String)
+    + FilePersistenceException(message : String, cause : Throwable)
+  }
+
+  class DuplicateTaskException extends Exception {
+    + DuplicateTaskException(message : String)
+  }
+}
+
+package "user" {
+  abstract class User {
+    - id : String
+    - name : String
+    - email : String
+    --
+    + getId() : String
+    + getName() : String
+    + getEmail() : String
+    --
+    + {abstract} canCreateTask() : boolean
+    + {abstract} canDeleteTask() : boolean
+    + {abstract} canAssignTask() : boolean
+    + {abstract} canUpdateTask() : boolean
+    + {abstract} canGenerateReport() : boolean
+    + {abstract} canWorkOnTask() : boolean
+    + toString() : String
+  }
+
+  class Admin extends User {
+    + canCreateTask() : boolean
+    + canDeleteTask() : boolean
+    + canAssignTask() : boolean
+    + canUpdateTask() : boolean
+    + canGenerateReport() : boolean
+    + canWorkOnTask() : boolean
+  }
+
+  class Manager extends User {
+    + canCreateTask() : boolean
+    + canDeleteTask() : boolean
+    + canAssignTask() : boolean
+    + canUpdateTask() : boolean
+    + canGenerateReport() : boolean
+    + canWorkOnTask() : boolean
+  }
+
+  class Engineer extends User {
+    - assignedTasks : List<Task>
+    --
+    + addTask(task : Task) : void
+    + removeTask(task : Task) : void
+    + getAssignedTasks() : List<Task>
+    + canCreateTask() : boolean
+    + canDeleteTask() : boolean
+    + canAssignTask() : boolean
+    + canUpdateTask() : boolean
+    + canGenerateReport() : boolean
+    + canWorkOnTask() : boolean
+  }
+
+  class UserAccount {
+    - password : String
+    --
+    + getUser() : User
+    + checkPassword(pwd : String) : boolean
+  }
+
+  class AuthService {
+    - accounts : List<UserAccount>
+    --
+    + addAccount(user : User, pwd : String) : void
+    + login(id : String, pwd : String) : User
+  }
+}
+
+package "task_management" {
+  class TaskHistoryEntry {
+    - timestamp : LocalDateTime
+    - performedBy : User
+    - action : String
+    --
+    + getTimestamp() : LocalDateTime
+    + getPerformedBy() : User
+    + getAction() : String
+    + toString() : String
+  }
+
+  class Task {
+    - taskId : String
+    - title : String
+    - description : String
+    - priority : PriorityLevel
+    - status : TaskStatus
+    - category : TaskCategory
+    - deadline : LocalDate
+    - assignedEngineer : Engineer
+    - dependencies : List<Task>
+    - history : List<TaskHistoryEntry>
+    --
+    + getTaskId() : String
+    + getTitle() : String
+    + getDescription() : String
+    + getPriority() : PriorityLevel
+    + getStatus() : TaskStatus
+    + getCategory() : TaskCategory
+    + getDeadline() : LocalDate
+    + getAssignedEngineer() : Engineer
+    + setAssignedEngineer(e, by) : void
+    + getDependencies() : List<Task>
+    + getHistory() : List<TaskHistoryEntry>
+    + addDependency(task, by) : void
+    + hasUnfinishedDependencies() : boolean
+    + refreshBlockedStatus() : void
+    + updateStatus(status, by) : void
+    + addHistoryEntry(action, by) : void
+    + compareTo(other : Task) : int
+    + toString() : String
+  }
+
+  class TaskManager {
+    - tasks : HashMap<String, Task>
+    - users : HashMap<String, User>
+    - inProgressTasks : HashSet<Task>
+    - taskQueue : PriorityQueue<Task>
+    --
+    + addUser(user : User) : void
+    + addTask(task : Task, by : User) : void
+    + findTask(taskId : String) : Task
+    + listTasks() : Collection<Task>
+    + assignTask(taskId, eng, by) : void
+    + startTask(taskId, eng) : void
+    + completeTask(taskId, eng) : void
+    + addDependency(taskId, depId, by) : void
+    - detectCircularDependency(src, tgt) : boolean
+    + getInProgressTasks() : Set<Task>
+    + saveTasksToFile(path : String) : void
+    + loadTasksFromFile(path : String) : void
+    + saveTaskHistoriesToFile(path : String) : void
+  }
+}
+
+package "utilities" {
+  interface Reportable {
+    + generateReport() : String
+  }
+
+  class ReportGenerator {
+    - taskManager : TaskManager
+    --
+    + generateReport() : String
+    + generateTaskReport() : String
+    + generateUserReport() : String
+    + generateOverdueReport() : String
+  }
+
+  class NotificationManager {
+    - type : NotificationType
+    --
+    + sendNotification(user, msg) : void
+    + notifyTaskAssigned(task, engineer) : void
+    + notifyTaskCompleted(task : Task) : void
+    + notifyTaskBlocked(task : Task) : void
+  }
+
+  class Dashboard {
+    - taskManager : TaskManager
+    --
+    + display() : void
+    + showTasksPerUser() : void
+    + showTasksPerStatus() : void
+    + showOverdueTasks() : void
+    + showTasksPerPriority() : void
+  }
+}
+
+package "file_management" {
+  class FileManager {
+    + createFile(path : String) : File
+    + writeFile(path : String, content : String) : void
+    + readFile(path : String) : String
+  }
+}
+
+package "gui" {
+  class LoginDialog {
+    - authenticatedUser : User
+    --
+    + LoginDialog(parent, auth : AuthService)
+    + getAuthenticatedUser() : User
+  }
+
+  class STRMSGui {
+    - taskManager : TaskManager
+    - currentUser : User
+    --
+    + STRMSGui(currentUser : User)
+    - applyPermissions() : void
+    - refreshTaskTable() : void
+    - seedDefaultUsers() : void
+    - logout() : void
+    + {static} main(args) : void
+  }
+}
+
+User <|-- Admin
+User <|-- Manager
+User <|-- Engineer
+
+UserAccount "1" o-- "1" User
+AuthService "1" o-- "0..*" UserAccount
+
+Task "0..*" --> "0..*" Task : depends on
+Task "1" *-- "0..*" TaskHistoryEntry : history
+Task --> PriorityLevel
+Task --> TaskStatus
+Task --> TaskCategory
+Task --> Engineer : assignedEngineer
+TaskHistoryEntry --> User : performedBy
+
+TaskManager "1" o-- "0..*" Task
+TaskManager "1" o-- "0..*" User
+TaskManager ..> CircularDependencyException : throws
+TaskManager ..> DependencyNotCompletedException : throws
+TaskManager ..> TaskNotFoundException : throws
+TaskManager ..> InvalidTaskStateException : throws
+TaskManager ..> InvalidRoleException : throws
+TaskManager ..> FilePersistenceException : throws
+TaskManager ..> DuplicateTaskException : throws
+TaskManager ..> FileManager : uses
+Task ..> InvalidTaskStateException : throws
+
+ReportGenerator ..|> Reportable
+ReportGenerator o-- TaskManager
+Dashboard o-- TaskManager
+NotificationManager --> NotificationType
+
+STRMSGui o-- TaskManager
+STRMSGui o-- User
+LoginDialog --> AuthService
+@enduml

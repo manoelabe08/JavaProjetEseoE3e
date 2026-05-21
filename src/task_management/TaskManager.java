@@ -1,0 +1,366 @@
+package task_management;
+
+import enums.TaskCategory;
+import enums.TaskStatus;
+import exceptions.CircularDependencyException;
+import exceptions.DependencyNotCompletedException;
+import exceptions.DuplicateTaskException;
+import exceptions.FilePersistenceException;
+import exceptions.InvalidRoleException;
+import exceptions.InvalidTaskStateException;
+import exceptions.TaskNotFoundException;
+import file_management.FileManager;
+import user.Engineer;
+import user.User;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileReader;  
+import java.io.FileWriter;
+import java.io.IOException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.PriorityQueue;
+import java.util.Set;
+/**
+ * The central controller of the STRMS system.
+ * Coordinates task operations, enforces business rules, manages state transitions, 
+ * and handles dependencies and persistence.
+ */
+public class TaskManager {
+    // We use HashMap for O(1) complexity when searching for tasks or users by ID
+    private final Map<String, Task> tasks;
+    private final Map<String, User> users;
+    // HashSet ensures unique elements and O(1) lookups for tasks currently in progress
+    private final Set<Task> inProgressTasks;
+    // PriorityQueue automatically sorts tasks based on their PriorityLevel (Comparable in Task class)
+    private final PriorityQueue<Task> taskQueue;
+
+    public TaskManager() {
+        this.tasks = new HashMap<>();
+        this.users = new HashMap<>();
+        this.inProgressTasks = new HashSet<>();
+        this.taskQueue = new PriorityQueue<>();
+    }
+
+    public void addUser(User user) {
+        users.put(user.getUID(), user);
+    }
+// Enforcing Role-Based Access Control (RBAC) before allowing the operation
+    public void addTask(Task task, User actor) throws InvalidRoleException, DuplicateTaskException {
+        if (!actor.canCreateTask()) {
+            throw new InvalidRoleException("User does not have permission to create tasks.");
+        }
+
+        if (tasks.containsKey(task.getTaskId())) {
+            throw new DuplicateTaskException("Task with ID " + task.getTaskId() + " already exists.");
+        }
+
+        tasks.put(task.getTaskId(), task);
+        taskQueue.offer(task); // Automatically placed in the queue based on priority
+        task.addHistoryEntry("Task created", actor);
+    }
+
+    public Task findTask(String taskId) throws TaskNotFoundException {
+        Task task = tasks.get(taskId);
+        if (task == null) {
+            throw new TaskNotFoundException("Task with ID " + taskId + " not found.");
+        }
+        return task;
+    }
+
+    public Collection<Task> listTasks() {
+        return tasks.values();
+    }
+
+    public void assignTask(String taskId, Engineer engineer, User actor)
+            throws TaskNotFoundException, InvalidRoleException {
+        if (!actor.canAssignTask()) {
+            throw new InvalidRoleException("User does not have permission to assign tasks.");
+        }
+
+        Task task = findTask(taskId);
+        task.setAssignedEngineer(engineer, actor);
+        engineer.addTask(task);
+        task.refreshBlockedStatus();
+    }
+
+    public void startTask(String taskId, Engineer engineer)
+            throws TaskNotFoundException, InvalidRoleException,
+            DependencyNotCompletedException, InvalidTaskStateException {
+        Task task = findTask(taskId);
+// Validating assignment before allowing the task to start
+        if (task.getAssignedEngineer() == null ||
+                !task.getAssignedEngineer().getUID().equals(engineer.getUID())) {
+            throw new InvalidRoleException("This engineer is not assigned to the task.");
+        }
+// Ensuring business rules: a task cannot start if dependencies are not DONE
+        if (task.hasUnfinishedDependencies()) {
+            task.refreshBlockedStatus();
+            task.addHistoryEntry("Start rejected because dependencies are incomplete", engineer);
+            throw new DependencyNotCompletedException("Cannot start task because dependencies are incomplete.");
+        }
+
+        task.updateStatus(TaskStatus.IN_PROGRESS, engineer);
+        inProgressTasks.add(task);
+    }
+
+    public void completeTask(String taskId, Engineer engineer)
+            throws TaskNotFoundException, InvalidRoleException, InvalidTaskStateException {
+        Task task = findTask(taskId);
+
+        if (task.getAssignedEngineer() == null ||
+                !task.getAssignedEngineer().getUID().equals(engineer.getUID())) {
+            throw new InvalidRoleException("Only the assigned engineer can complete this task.");
+        }
+
+        task.updateStatus(TaskStatus.DONE, engineer);
+        inProgressTasks.remove(task);
+
+        for (Task current : tasks.values()) {
+            current.refreshBlockedStatus();
+        }
+    }
+
+    public void addDependency(String taskId, String dependencyId, User actor)
+            throws TaskNotFoundException, CircularDependencyException, InvalidRoleException {
+        if (!actor.canUpdateTask()) {
+            throw new InvalidRoleException("User does not have permission to add dependencies.");
+        }
+
+        Task task = findTask(taskId);
+        Task dependency = findTask(dependencyId);
+// Direct self-dependency check
+        if (task.getTaskId().equals(dependency.getTaskId())) {
+            throw new CircularDependencyException("A task cannot depend on itself.");
+        }
+// Checking for indirect circular dependencies to prevent system deadlocks
+        if (detectCircularDependency(dependency, task)) {
+            throw new CircularDependencyException("Circular dependency detected.");
+        }
+
+        task.addDependency(dependency, actor);
+    }
+/**
+     * Uses a Depth-First Search (DFS) approach to traverse the dependency graph
+     * and check if adding a dependency would create a cycle.
+     */
+    private boolean detectCircularDependency(Task current, Task target) {
+        if (current.getDependencies().contains(target)) {
+            return true;
+        }
+
+        for (Task dep : current.getDependencies()) {
+
+
+            if (detectCircularDependency(dep, target)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public Set<Task> getInProgressTasks() {
+        return inProgressTasks;
+    }
+
+    public void saveTasksToFile(String filename) throws FilePersistenceException {
+        FileManager fileManager = new FileManager();
+        StringBuilder builder = new StringBuilder();
+
+        for (Task task : tasks.values()) {
+            String engineerId = task.getAssignedEngineer() == null ? "null" : task.getAssignedEngineer().getUID();
+            builder.append(task.getTaskId()).append(";");
+            builder.append(task.getTitle()).append(";");
+            builder.append(task.getDescription().replace(";", ",")).append(";");
+            builder.append(task.getPriority()).append(";");
+            builder.append(task.getStatus()).append(";");
+            builder.append(task.getCategory()).append(";");
+            builder.append(task.getDeadline()).append(";");
+            builder.append(engineerId).append(System.lineSeparator());
+        }
+
+        fileManager.writeFile(filename, builder.toString());
+    }
+
+    public void loadTasksFromFile(String filename) throws FilePersistenceException {
+        FileManager fileManager = new FileManager();
+        String content = fileManager.readFile(filename);
+
+        if (content.isBlank()) {
+            return;
+        }
+
+        String[] lines = content.split(System.lineSeparator());
+
+        for (String line : lines) {
+            if (line.isBlank()) {
+                continue;
+            }
+
+            String[] parts = line.split(";");
+            if (parts.length < 8) {
+                continue;
+            }
+
+            Task task = new Task(
+                    parts[0],
+                    parts[1],
+                    parts[2],
+                    enums.PriorityLevel.valueOf(parts[3]),
+                    TaskCategory.valueOf(parts[5]),
+                    LocalDate.parse(parts[6])
+            );
+
+            tasks.put(task.getTaskId(), task);
+            taskQueue.offer(task);
+        }
+    }
+
+    public void saveTaskHistoryToFile(String taskId, String filePath)
+            throws TaskNotFoundException, FilePersistenceException {
+        try {
+            Task task = findTask(taskId);
+
+            File file = new File(filePath);
+            File parent = file.getParentFile();
+            if (parent != null && !parent.exists()) {
+                parent.mkdirs();
+            }
+
+            BufferedWriter writer = new BufferedWriter(new FileWriter(file));
+            writeTaskHistory(writer, task);
+            writer.close();
+        } catch (IOException e) {
+            throw new FilePersistenceException("Error while saving history of task " + taskId + ": " + e.getMessage());
+        }
+    }
+
+    public void saveTaskHistoriesToFile(String filePath) throws FilePersistenceException {
+        try {
+            File file = new File(filePath);
+            File parent = file.getParentFile();
+            if (parent != null && !parent.exists()) {
+                parent.mkdirs();
+            }
+
+            BufferedWriter writer = new BufferedWriter(new FileWriter(file));
+
+            for (Task task : tasks.values()) {
+                writeTaskHistory(writer, task); 
+            }
+
+            writer.close();
+        } catch (IOException e) {
+            throw new FilePersistenceException("Error while saving task histories: " + e.getMessage());
+        }
+    }
+
+    public void loadTaskHistoriesFromFile(String filePath)
+            throws FilePersistenceException, TaskNotFoundException {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            Task currentTask = null;
+            boolean readingHistory = false;
+
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+
+                if (line.isEmpty()) {
+                    continue;
+                }
+
+                if (line.equals("====================================")) {
+                    currentTask = null;
+                    readingHistory = false;
+                    continue;
+                }
+
+                if (line.startsWith("TASK ID: ")) {
+                    String taskId = line.substring("TASK ID: ".length()).trim();
+                    currentTask = findTask(taskId);
+                    currentTask.clearHistory();
+                    readingHistory = false;
+                    continue;
+                }
+
+                if (line.equals("HISTORY:")) {
+                    readingHistory = true;
+                    continue;
+                }
+
+                if (readingHistory && line.startsWith("- ")) {
+                    if (currentTask == null) {
+                        continue;
+                    }
+
+                    String entryText = line.substring(2).trim();
+                    String[] parts = entryText.split("\\s*\\|\\s*", 3);
+
+                    if (parts.length < 3) {
+                        continue;
+                    }
+
+                    LocalDateTime timestamp = LocalDateTime.parse(parts[0]);
+                    String userName = parts[1];
+                    String action = parts[2];
+
+                    User matchedUser = findUserByName(userName);
+                    if (matchedUser == null) {
+                        throw new FilePersistenceException("User not found for history entry: " + userName);
+                    }
+
+                    currentTask.addLoadedHistoryEntry(
+                            new TaskHistoryEntry(timestamp, matchedUser, action)
+                    );
+                }
+            }
+        } catch (TaskNotFoundException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new FilePersistenceException("Error while loading task histories: " + e.getMessage());
+        }
+    }
+
+    private User findUserByName(String name) {
+        for (User user : users.values()) {
+            if (user.getName().equals(name)) {
+                return user;
+            }
+        }
+        return null;
+    }
+
+    private void writeTaskHistory(BufferedWriter writer, Task task) throws IOException {
+        writer.write("====================================");
+        writer.newLine();
+        writer.write("TASK ID: " + task.getTaskId());
+        writer.newLine();
+        writer.write("TITLE: " + task.getTitle());
+        writer.newLine();
+        writer.write("STATUS: " + task.getStatus());
+        writer.newLine();
+        writer.write("CATEGORY: " + task.getCategory());
+        writer.newLine();
+        writer.write("DEADLINE: " + task.getDeadline());
+        writer.newLine();
+        writer.write("ASSIGNED ENGINEER: " +
+                (task.getAssignedEngineer() == null ? "None" : task.getAssignedEngineer().getName()));
+        writer.newLine();
+        writer.write("HISTORY:");
+        writer.newLine();
+
+        for (TaskHistoryEntry entry : task.getHistory()) {
+            writer.write(" - " + entry.toString());
+            writer.newLine();
+        }
+
+        writer.newLine();
+    }
+}

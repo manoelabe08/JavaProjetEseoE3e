@@ -1,0 +1,31 @@
+@startuml
+!theme blueprint
+skinparam sequenceArrowThickness 2
+skinparam responseMessageBelowArrow true
+title Scénario 1 : Création d'une tâche par l'Admin
+
+actor "Admin (Alice)" as Alice
+participant "STRMSGui" as GUI
+participant "TaskManager" as TM
+participant "Task" as T
+participant "TaskHistoryEntry" as THE
+
+Alice -> GUI : clique "Créer tâche"\n(titre, priorité, catégorie, deadline)
+GUI -> TM : addTask(task, alice)
+TM -> TM : alice.canCreateTask() ?
+
+alt Alice sans permission
+    TM --> GUI : throw InvalidRoleException
+    GUI --> Alice : Erreur "Rôle insuffisant"
+else Alice autorisée
+    TM -> T : new Task(id, titre, desc, priorité, catégorie, deadline)
+    T --> TM : task (status = TODO)
+    TM -> TM : tasks.put(id, task)
+    TM -> TM : taskQueue.add(task)
+    TM -> T : addHistoryEntry("Tâche créée", alice)
+    T -> THE : new TaskHistoryEntry(now, alice, "Tâche créée")
+    THE --> T : ajouté à history
+    TM --> GUI : Succès
+    GUI --> Alice : Tâche créée (TODO)
+end
+@enduml

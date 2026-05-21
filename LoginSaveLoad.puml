@@ -1,0 +1,56 @@
+@startuml
+!theme blueprint
+skinparam sequenceArrowThickness 2
+skinparam responseMessageBelowArrow true
+title Scénario 5 : Authentification + Sauvegarde/Chargement
+
+actor "Utilisateur" as U
+participant "LoginDialog" as LD
+participant "AuthService" as AS
+participant "STRMSGui" as GUI
+participant "TaskManager" as TM
+participant "FileManager" as FM
+
+== Login ==
+U -> LD : saisit id + mot de passe
+LD -> AS : login(id, password)
+alt Identifiants invalides
+    AS --> LD : return null
+    LD --> U : Erreur "Identifiants invalides"
+else Authentification OK
+    AS --> LD : return User
+    LD -> GUI : new STRMSGui(user)
+    GUI -> GUI : applyPermissions()
+    GUI --> U : Interface chargée selon le rôle
+end
+
+== Sauvegarde ==
+U -> GUI : clique "Sauvegarder"
+GUI -> TM : saveTasksToFile("data/tasks.txt")
+TM -> FM : writeFile(path, content)
+alt Erreur écriture
+    FM --> TM : IOException
+    TM --> GUI : throw FilePersistenceException
+    GUI --> U : Erreur "Sauvegarde échouée"
+else Succès
+    FM --> TM : OK
+    TM --> GUI : OK
+    GUI --> U : "Tâches sauvegardées"
+end
+
+== Chargement ==
+U -> GUI : clique "Charger"
+GUI -> TM : loadTasksFromFile("data/tasks.txt")
+TM -> FM : readFile(path)
+alt Fichier introuvable / corrompu
+    FM --> TM : IOException
+    TM --> GUI : throw FilePersistenceException
+    GUI --> U : Erreur "Chargement échoué"
+else Succès
+    FM --> TM : contenu
+    TM -> TM : reconstruit Task + History
+    TM --> GUI : OK
+    GUI -> GUI : refreshTaskTable()
+    GUI --> U : Tableau mis à jour
+end
+@enduml

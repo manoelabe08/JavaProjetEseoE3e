@@ -1,0 +1,50 @@
+@startuml
+!theme blueprint
+skinparam sequenceArrowThickness 2
+skinparam responseMessageBelowArrow true
+title Scénario 3 : Démarrage et complétion par l'Ingénieur
+
+actor "Engineer (Charlie)" as Charlie
+participant "STRMSGui" as GUI
+participant "TaskManager" as TM
+participant "Task" as T
+participant "TaskHistoryEntry" as THE
+participant "NotificationManager" as NM
+
+== Démarrage ==
+Charlie -> GUI : clique "Démarrer Task1"
+GUI -> TM : startTask("T1", charlie)
+TM -> T : hasUnfinishedDependencies()
+T --> TM : résultat
+
+alt Dépendances incomplètes
+    TM --> GUI : throw DependencyNotCompletedException
+    T -> THE : TaskHistoryEntry\n"Tentative échouée : dépendances incomplètes"
+    GUI --> Charlie : Erreur "Dépendances non complétées"
+else Dépendances OK
+    TM -> T : updateStatus(IN_PROGRESS, charlie)
+    T -> THE : TaskHistoryEntry\n"Statut -> IN_PROGRESS"
+    TM -> TM : inProgressTasks.add(task)
+    TM --> GUI : Succès
+    GUI --> Charlie : Tâche démarrée (IN_PROGRESS)
+end
+
+== Complétion ==
+Charlie -> GUI : clique "Terminer Task1"
+GUI -> TM : completeTask("T1", charlie)
+TM -> T : updateStatus(DONE, charlie)
+
+alt Transition d'état invalide
+    T --> TM : throw InvalidTaskStateException
+    TM --> GUI : Erreur de transition
+    GUI --> Charlie : Erreur état invalide
+else Transition OK
+    T -> THE : TaskHistoryEntry\n"Statut -> DONE"
+    TM -> TM : inProgressTasks.remove(task)
+    TM -> TM : refreshBlockedStatus() toutes tâches
+    TM -> NM : notifyTaskCompleted(task)
+    NM --> Charlie : Notification envoyée
+    TM --> GUI : Succès
+    GUI --> Charlie : Tâche terminée (DONE)
+end
+@enduml

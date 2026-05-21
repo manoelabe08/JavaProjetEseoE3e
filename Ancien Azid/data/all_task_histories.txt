@@ -1,0 +1,20 @@
+====================================
+TASK ID: T1
+TITLE: task1
+STATUS: BLOCKED
+CATEGORY: BUGFIX
+DEADLINE: 2026-05-20
+ASSIGNED ENGINEER: Charlie
+HISTORY:
+ - 2026-05-12T09:50:49.115645 | azid | Dependency added: T2
+ - 2026-05-12T09:50:54.248978200 | azid | Assigned to engineer Charlie
+
+====================================
+TASK ID: T2
+TITLE: task2
+STATUS: TODO
+CATEGORY: FEATURE
+DEADLINE: 2026-05-17
+ASSIGNED ENGINEER: None
+HISTORY:
+

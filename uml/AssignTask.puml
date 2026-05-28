@@ -1,0 +1,44 @@
+@startuml
+!theme blueprint
+skinparam sequenceArrowThickness 2
+skinparam responseMessageBelowArrow true
+title Scénario 2 : Assignation d'une tâche par le Manager
+
+actor "Manager (Bob)" as Bob
+participant "STRMSGui" as GUI
+participant "TaskManager" as TM
+participant "Task" as T
+participant "Engineer" as Eng
+participant "TaskHistoryEntry" as THE
+participant "NotificationManager" as NM
+
+Bob -> GUI : sélectionne Task1 + Charlie\npuis "Assigner"
+GUI -> TM : assignTask("T1", charlie, bob)
+TM -> TM : findTask("T1")
+
+alt Tâche introuvable
+    TM --> GUI : throw TaskNotFoundException
+    GUI --> Bob : Erreur "Tâche introuvable"
+else Tâche trouvée
+    TM -> TM : bob.canAssignTask() ?
+    alt Bob sans permission
+        TM --> GUI : throw InvalidRoleException
+        GUI --> Bob : Erreur "Rôle insuffisant"
+    else Bob autorisé
+        TM -> T : setAssignedEngineer(charlie, bob)
+        T -> THE : new TaskHistoryEntry(now, bob, "Assignée à Charlie")
+        THE --> T : ajouté à history
+        TM -> Eng : charlie.addTask(task)
+        TM -> T : refreshBlockedStatus()
+        alt Dépendances non DONE
+            T -> T : status = BLOCKED
+        else Dépendances OK
+            T -> T : status = TODO
+        end
+        TM -> NM : notifyTaskAssigned(task, charlie)
+        NM --> Bob : Notification envoyée
+        TM --> GUI : Succès
+        GUI --> Bob : Tâche assignée à Charlie
+    end
+end
+@enduml

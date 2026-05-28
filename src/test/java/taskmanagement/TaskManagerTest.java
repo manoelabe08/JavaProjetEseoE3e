@@ -161,6 +161,9 @@ class TaskManagerTest {
 
         assertThrows(CircularDependencyException.class,
                 () -> taskManager.addDependency("T3", "T1", admin));
+        
+        assertFalse(taskManager.findTask("T3").getDependencies().contains(task1), 
+                "T3 ne doit pas contenir T1 après le rejet");
     }
 
     @Test

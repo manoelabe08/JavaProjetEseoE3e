@@ -41,8 +41,8 @@ public class LoginDialog extends JDialog {
             if (id.isEmpty() || password.isEmpty()) {
                 JOptionPane.showMessageDialog(
                         this,
-                        "Veuillez remplir l'identifiant et le mot de passe.",
-                        "Erreur",
+                        "Please fill in the username and password.",
+                        "Error",
                         JOptionPane.ERROR_MESSAGE
                 );
                 return;
@@ -54,8 +54,8 @@ public class LoginDialog extends JDialog {
             if (user == null) {
                 JOptionPane.showMessageDialog(
                         this,
-                        "Identifiant ou mot de passe incorrect.",
-                        "Erreur de connexion",
+                        "Incorrect username or password.",
+                        "Connection error",
                         JOptionPane.ERROR_MESSAGE
                 );
             } else {

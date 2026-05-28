@@ -163,7 +163,7 @@ class TaskManagerTest {
                 () -> taskManager.addDependency("T3", "T1", admin));
         
         assertFalse(taskManager.findTask("T3").getDependencies().contains(task1), 
-                "T3 ne doit pas contenir T1 après le rejet");
+                "T3 must not contain T1 after rejection");
     }
 
     @Test

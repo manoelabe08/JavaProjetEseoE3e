@@ -80,7 +80,7 @@ public class STRMSGui extends JFrame {
         this.localUsers = new ArrayList<>();
         this.currentUser = loggedUser;
 
-        setTitle("STRMS - Smart Task & Resource Management System - Connected: " + currentUser.getName());
+        setTitle("STRMS - Smart Task & Resource Management System - User Connected: " + currentUser.getName());
         setSize(1200, 720);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
